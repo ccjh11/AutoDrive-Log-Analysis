@@ -23,6 +23,8 @@ graph TD
     D --> E[诊断大脑: rule_engine]
     E --> F[生成报告: report_generator]
     B <--> G[前端界面: gui_main]
+    ```
+    ---
 ⏱️ 核心业务时序图 (Sequence Diagram)
 以下展现了用户点击“开始分析”后，数据从长表提炼、规则洗礼、再到通知 GUI 进度拉满的全生命周期异步时序：
 
