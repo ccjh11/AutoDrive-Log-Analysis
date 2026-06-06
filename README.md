@@ -13,29 +13,16 @@ Markdown
 
 ---
 
-## 🏗️ 项目架构图 (Project Architecture)
-
-系统采用典型的**分层解耦与中台化 Pipeline 架构**。各模块之间数据单向流动，接口契约严格对齐：
+## 🏗️ 项目架构图
 
 ```mermaid
 graph TD
-    A[输入层: 原始CSV/带毒故障日志] --> B[核心调度层: main.py]
-    subgraph GUI皮囊层
-        G[gui_main.py Frontend] <-->|用户交互/多线程触发/回调| B
-    end
-    B --> C{适配解析管线}
-    C -->|老式标准宽表| D[data_processor.py]
-    C -->|CAN原始长表/故障数据| E[can_parser.py 转换中台]
-    D --> F[标准信号宽表 DataFrame]
-    E --> F
-    F --> H[诊断大脑: rule_engine.py]
-    H -->|异常诊断报告列表| I[输出层: report_generator.py]
-    I -->|自动化渲染| J[report.html]
-    I -->|工业级交付| K[report.docx]
-    
-    style E fill:#f9f,stroke:#333,stroke-width:2px
-    style H fill:#bbf,stroke:#333,stroke-width:2px
-    style G fill:#bfb,stroke:#333,stroke-width:2px
+    A[输入: 原始长表/故障日志] --> B[核心调度: main.py]
+    B --> C[解析中台: can_parser]
+    C --> D[宽表 DataFrame]
+    D --> E[诊断大脑: rule_engine]
+    E --> F[生成报告: report_generator]
+    B <--> G[前端界面: gui_main]
 ⏱️ 核心业务时序图 (Sequence Diagram)
 以下展现了用户点击“开始分析”后，数据从长表提炼、规则洗礼、再到通知 GUI 进度拉满的全生命周期异步时序：
 
@@ -83,7 +70,7 @@ Plaintext
 │   └── test_can_parser.py      # Pytest 自动化测试用例
 ├── generate_mock_data.py       # 🧪 混沌数据流与 HIL 故障注入靶场生成脚本
 └── main.py                     # 🎛️ 项目主干与总调度控台入口
-💻 GUI 界面展示
+💻 GUI 界面展示(gui_screenshot.png)
 
 🛠️ 快速开始
 1. 环境准备
