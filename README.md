@@ -23,6 +23,7 @@ graph TD
     D --> E[诊断大脑: rule_engine]
     E --> F[生成报告: report_generator]
     B <--> G[前端界面: gui_main]
+    ```
 ⏱️ 核心业务时序图
 Code snippet
 sequenceDiagram
