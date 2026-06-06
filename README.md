@@ -8,7 +8,7 @@ Markdown
 - **全链路插拔式架构**：业务逻辑、底层解析、高层界面及报告渲染彻底解耦。
 - **CAN 原始长表高效对齐**：自主开发 CAN 原始长表解析中台，完美解决乱序报文的多信号重采样、时间戳对齐及向前填充（ffill）难题。
 - **HIL 故障注入靶场**：支持在仿真流中动态注入**传感器信号跳变**、**通信超时信号丢失（NaN）**等典型故障。
-- **多线程守护前端**：基于 Tkinter 打造直观 GUI，采用高效的多线程（Threading）及回调（Callback）机制，确保大数据量清洗时界面丝滑不卡顿。
+- **多线程守护前端**：基于 Tkinter 打造直观 GUI，采用高效的多线程及回调机制，确保界面丝滑不卡顿。
 - **现代工程保障**：全套 Pytest 单元测试质量护航，守住代码重构底线。
 
 ---
@@ -36,7 +36,7 @@ graph TD
     style E fill:#f9f,stroke:#333,stroke-width:2px
     style H fill:#bbf,stroke:#333,stroke-width:2px
     style G fill:#bfb,stroke:#333,stroke-width:2px
-```  <-- 【关键】就是补上这三个反引号！
+⏱️ 核心业务时序图 (Sequence Diagram)
 以下展现了用户点击“开始分析”后，数据从长表提炼、规则洗礼、再到通知 GUI 进度拉满的全生命周期异步时序：
 
 Code snippet
@@ -57,7 +57,7 @@ sequenceDiagram
     Main->>Parser: parse_can_raw_long_table() 对齐与重采样
     Parser-->>Main: 返回物理值宽表 DataFrame (契约数据)
     Main->>Engine: 初始化 RuleEngine(frames) 并执行 analyze()
-    Note over Engine: 激活HIL故障诊断算法<br/>(差分跳变捕获/NaN超时识别)
+    Note over Engine: 激活HIL故障诊断算法 (差分跳变/NaN超时)
     Engine-->>Main: 返回诊断出的异常报告列表
     Main->>Gen: 传入变量进行数据渲染，严禁重读硬盘文件
     Gen->>Gen: 画图并落盘输出 report.html & report.docx
@@ -72,18 +72,15 @@ Plaintext
 │   ├── can_parser.py           # CAN 总线原始日志高精度重采样与时间对齐中台
 │   ├── data_processor.py       # 老旧款标准宽表加载器（已解耦兼容）
 │   └── rule_engine.py          # 诊断大脑（集成HIL传感器跳变与超时丢失检测规则）
-├── data/                       # 📊 数据仓储（支持大体积原始日志与带毒仿真靶场）
+├── data/                       # 📊 数据仓储
 │   ├── chaos_can_raw_log.csv   # 仿真 CAN 总线原始长表日志
 │   └── massive_chaos_fault_injection.csv # 注入突变、空值的故障注入日志
 ├── gui/                        # 🎨 界面皮囊层
-│   ├── __init__.py
 │   └── gui_main.py             # Tkinter 前端（多线程异步调度与回调控制中心）
 ├── output/                     # 📄 输出渲染层
-│   ├── __init__.py
-│   └── report_generator.py     # 报告生成器（基于 DataFrame 动态画图、导出 Word/HTML）
+│   └── report_generator.py     # 报告生成器
 ├── tests/                      # 🚀 单元测试护航层
-│   └── test_can_parser.py      # Pytest 自动化测试用例（防止防弹中台二次污染）
-├── output_result/              # 🎯 测试报告输出目录（自动创建）
+│   └── test_can_parser.py      # Pytest 自动化测试用例
 ├── generate_mock_data.py       # 🧪 混沌数据流与 HIL 故障注入靶场生成脚本
 └── main.py                     # 🎛️ 项目主干与总调度控台入口
 💻 GUI 界面展示
