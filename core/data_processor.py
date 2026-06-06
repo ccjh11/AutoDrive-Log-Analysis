@@ -27,11 +27,9 @@ def load_and_clean_log(csv_path):
     df = pd.read_csv(csv_path)
     # 丢弃全空行
     df = df.dropna(how='all')
-    # 用合适的方式填充空值（数值字段用0填充，字符串用空字符串填充）
+    # Speed/Target_Distance 保留 NaN 供信号丢失检测；其余字段填充默认值
     df = df.fillna({
         'time': 0,
-        'Speed': 0,
-        'Target_Distance': 0,
         'AEB_Trigger': 0,
         'Brake_Pressure': 0,
         'DTC_Code': ''

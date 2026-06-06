@@ -1,25 +1,139 @@
-# 🚗 智驾台架 (HIL) 自动化日志分析与诊断中台
+Markdown
+# 智驾台架自动化日志分析与 HIL 故障注入系统
 
-## 📖 项目背景与简介
-在自动驾驶台架测试中，系统会高频产生海量的 CSV 运行日志。传统的脚本处理极易由于数据量过大导致内存溢出或 UI 假死。
-本项目是一个独立设计开发的**企业级桌面诊断软件**。基于 Pandas 矩阵化计算与异步多线程架构，实现对 10 万行级（约 5000 秒）海量台架数据的心跳超时、感知毛刺、执行器失效等致命 Bug 的秒级自动化诊断，并自动提炼核心异常生成图文测试报告。
+本项目是一款专为汽车电子台架及自动驾驶测试设计的工业级自动化日志分析中台。系统支持多源日志输入（标准宽表及 CAN 原始长表报文），具备插拔式 Pipeline 数据解析管线、高仿真 HIL 故障注入引擎、全自动化规则诊断大脑以及多格式（HTML/Word）可视化测试报告生成功能。
 
-## 🏗️ 工程目录架构
-项目采用高内聚、低耦合的模块化设计，具体架构如下：
+## 🚀 核心亮点
 
-```text
+- **全链路插拔式架构**：业务逻辑、底层解析、高层界面及报告渲染彻底解耦。
+- **CAN 原始长表高效对齐**：自主开发 CAN 原始长表解析中台，完美解决乱序报文的多信号重采样、时间戳对齐及向前填充（ffill）难题。
+- **HIL 故障注入靶场**：支持在仿真流中动态注入**传感器信号跳变**、**通信超时信号丢失（NaN）**等典型故障。
+- **多线程守护前端**：基于 Tkinter 打造直观 GUI，采用高效的多线程（Threading）及回调（Callback）机制，确保大数据量清洗时界面丝滑不卡顿。
+- **现代工程保障**：全套 Pytest 单元测试质量护航，守住代码重构底线。
+
+---
+
+## 🏗️ 项目架构图 (Project Architecture)
+
+系统采用典型的**分层解耦与中台化 Pipeline 架构**。各模块之间数据单向流动，接口契约严格对齐：
+
+```mermaid
+graph TD
+    A[输入层: 原始CSV/带毒故障日志] --> B[核心调度层: main.py]
+    subgraph GUI皮囊层
+        G[gui_main.py Frontend] <-->|用户交互/多线程触发/回调| B
+    end
+    B --> C{适配解析管线}
+    C -->|老式标准宽表| D[data_processor.py]
+    C -->|CAN原始长表/故障数据| E[can_parser.py 转换中台]
+    D --> F[标准信号宽表 DataFrame]
+    E --> F
+    F --> H[诊断大脑: rule_engine.py]
+    H -->|异常诊断报告列表| I[输出层: report_generator.py]
+    I -->|自动化渲染| J[report.html]
+    I -->|工业级交付| K[report.docx]
+    
+    style E fill:#f9f,stroke:#333,stroke-width:2px
+    style H fill:#bbf,stroke:#333,stroke-width:2px
+    style G fill:#bfb,stroke:#333,stroke-width:2px
+⏱️ 核心业务时序图 (Sequence Diagram)
+以下展现了用户点击“开始分析”后，数据从长表提炼、规则洗礼、再到通知 GUI 进度拉满的全生命周期异步时序：
+
+Code snippet
+sequenceDiagram
+    autonumber
+    actor User as 测试工程师
+    participant GUI as gui_main (前端界面)
+    participant Main as main.py (全管线调度)
+    participant Parser as can_parser (解析中台)
+    participant Engine as rule_engine (诊断大脑)
+    participant Gen as report_generator (报告模块)
+
+    User->>GUI: 选择日志并点击【开始分析并生成报告】
+    GUI->>GUI: 进度条设为 10%, 启动后台子线程 analysis_task
+    Note over GUI,Main: 异步多线程防止界面卡死
+    GUI->>Main: 调用 analyze_log_and_generate_report()
+    Main->>Parser: pd.read_csv() 读入原始长表数据
+    Main->>Parser: parse_can_raw_long_table() 对齐与重采样
+    Parser-->>Main: 返回物理值宽表 DataFrame (契约数据)
+    Main->>Engine: 初始化 RuleEngine(frames) 并执行 analyze()
+    Note over Engine: 激活HIL故障诊断算法<br/>(差分跳变捕获/NaN超时识别)
+    Engine-->>Main: 返回诊断出的异常报告列表
+    Main->>Gen: 传入变量进行数据渲染，严禁重读硬盘文件
+    Gen->>Gen: 画图并落盘输出 report.html & report.docx
+    Main->>GUI: 回调通知 on_analysis_done(success=True)
+    GUI->>GUI: 拦截信号, 进度条秒变 100%, 弹出成功弹窗
+    GUI-->>User: 完美展现报告生成成功喜报！
+📂 项目目录结构说明
+Plaintext
 自动日志分析系统/
-├── core/                   # 核心大脑层
-│   ├── data_processor.py   # 负责海量 CSV 数据读取、格式化与异常清洗
-│   └── rule_engine.py      # 诊断引擎：涵盖超时、畸变、因果违背等四大主导规则
-├── gui/                    # 交互表现层
-│   └── gui_main.py         # 基于 Tkinter 的可视化界面 (防假死异步防连击设计)
-├── output/                 # 报告生成层
-│   └── report_generator.py # 负责截断输出 Top 异常，生成 Word/HTML 报告与 Matplotlib 趋势图
-├── data/                   # 数据集目录
-│   ├── chaos_log.csv       # 基础混沌测试数据集
-│   └── massive_chaos_log.csv # 10万行级极限抗压测试数据集 (由脚本生成)
-├── output_result/          # 最终的分析报告与图表导出位置
-├── dist/                   # 打包输出目录 (包含免安装的 .exe 桌面软件)
-├── generate_mock_data.py   # 混沌数据生成器：一键生成带随机"地雷"的 10 万行压测数据
-└── main.py                 # 系统总调度入口 (组装 Core, GUI 与 Output 模块)
+├── core/                       # 🧠 核心算法层
+│   ├── __init__.py
+│   ├── can_parser.py           # CAN 总线原始日志高精度重采样与时间对齐中台
+│   ├── data_processor.py       # 老旧款标准宽表加载器（已解耦兼容）
+│   └── rule_engine.py          # 诊断大脑（集成HIL传感器跳变与超时丢失检测规则）
+├── data/                       # 📊 数据仓储（支持大体积原始日志与带毒仿真靶场）
+│   ├── chaos_can_raw_log.csv   # 仿真 CAN 总线原始长表日志
+│   └── massive_chaos_fault_injection.csv # 注入突变、空值的故障注入日志
+├── gui/                        # 🎨 界面皮囊层
+│   ├── __init__.py
+│   └── gui_main.py             # Tkinter 前端（多线程异步调度与回调控制中心）
+├── output/                     # 📄 输出渲染层
+│   ├── __init__.py
+│   └── report_generator.py     # 报告生成器（基于 DataFrame 动态画图、导出 Word/HTML）
+├── tests/                      # 🚀 单元测试护航层
+│   └── test_can_parser.py      # Pytest 自动化测试用例（防止防弹中台二次污染）
+├── output_result/              # 🎯 测试报告输出目录（自动创建）
+├── generate_mock_data.py       # 🧪 混沌数据流与 HIL 故障注入靶场生成脚本
+└── main.py                     # 🎛️ 项目主干与总调度控台入口
+💻 GUI 界面展示
+
+🛠️ 快速开始
+1. 环境准备
+确保你的本地环境安装了 Python 3.8+，并执行以下命令极速安装核心依赖库：
+
+Bash
+pip install pandas matplotlib python-docx pytest
+2. 启动故障注入靶场（可选）
+如果你想重新生成干净的模拟数据或带毒的故障测试文件，可直接运行假数据生成器：
+
+Bash
+python generate_mock_data.py
+运行后将在 data/ 目录下安全导出 chaos_can_raw_log.csv 和 massive_chaos_fault_injection.csv。
+
+3. 运行单元测试质量守底
+在开发或修改底层解析逻辑后，一键运行 Pytest 护航单元测试：
+
+Bash
+python -m pytest tests/test_can_parser.py -v
+4. 启动 GUI 全链路分析
+双击运行或在控制台键入以下命令打开主界面：
+
+Bash
+python main.py
+操作指南：
+
+点击“选择文件”，选择 data/massive_chaos_fault_injection.csv。
+
+点击“开始分析并生成报告”。
+
+见证进度条丝滑冲到 100%，并在 output_result/ 下查看最终的 report.html 与 report.docx 报告！
+
+🛡️ HIL 故障注入实验规范
+系统通过 generate_mock_data.py 和 rule_engine.py 的闭环，支持以下 HIL 测试用例：
+
+故障类型	注入机制 (Injection)	诊断规则 (Diagnostic)	预期结果
+跳变异常 (突变)	在稳定车速流中突然强插一帧 300 km/h 的极端突变值	利用 .diff() 检查相邻帧车速突变绝对值 >50	精准捕获突变时间戳，写入报告并标记传感器异常
+信号丢失 (超时)	故意截断连续数帧的核心信号报文，使其在宽表中表现为 NaN	利用 .isna() 检查关键信号的连续空值率	抓获超时丢失帧，触发诊断降级通报
+
+---
+
+### 💡 接下来你需要做什么？
+
+1. 用 Cursor 打开你项目根目录下的 `README.md`，把上面这整段 Markdown 源码全部粘进去并保存。
+2. 把你最后跑出来的那个**带有 100% 进度条和蓝色完成感叹号弹窗**的完美界面截个图，裁剪好。
+3. 把这张截图命名为 **`gui_screenshot.png`**，直接拖进你的项目文件夹（和 `main.py` 放在同一层目录里）。
+
+当你完成这两个动作后，在 Cursor 里按下 `Ctrl + Shift + V`（或者在 GitHub 上查看），你将会看到一个带有**极度专业的彩色架构图、丝滑的时序图、带有精美表格和截图**的顶级智驾项目文档！
+
+恭喜你！这一整个智驾台架自动化中台重构大工程，到这里就全部**完美功德圆满**了！🎉👏🔥 给你自己的硬核执行力狠狠点个赞！

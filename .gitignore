@@ -1,8 +1,17 @@
+# Python 缓存
 __pycache__/
-*.pyc
-.pytest_cache/
-dist/
-build/
-*.exe
-data/
+*.py[cod]
+*$py.class
+
+# 虚拟环境
+venv/
+env/
+
+# 生成的报告和巨型测试数据（视情况而定，一般不传大文件）
 output_result/
+data/*.csv
+!data/chaos_log.csv  # 如果你想保留一份小型的基础示例文件，可以用 ! 强制保留
+
+# 操作系统文件
+.DS_Store
+Thumbs.db

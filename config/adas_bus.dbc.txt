@@ -1,0 +1,33 @@
+# adas_bus.dbc.txt 文件仅为 DBC 文本模板
+#
+# 你可以配合如下 Python 函数利用 cantools 加载和解析上面的 DBC 文件，
+# 自动提取关键智驾信号的 can_id、信号名、起始位、长度、计算因子等，生成“信号动态地图”字典：
+#
+# 示例代码（需要配合 cantools）：
+
+"""
+def load_signal_dynamic_map(dbc_path, interested_signals=('Speed', 'Target_Distance', 'AEB_Trigger')):
+    import cantools
+    signal_map = {}
+
+    db = cantools.database.load_file(dbc_path)
+    for message in db.messages:
+        for signal in message.signals:
+            if signal.name in interested_signals:
+                can_id = message.frame_id
+                signal_info = {
+                    'can_id': can_id,
+                    'signal_name': signal.name,
+                    'start_bit': signal.start,
+                    'length': signal.length,
+                    'factor': signal.scale,
+                    'offset': signal.offset,
+                    'unit': signal.unit,
+                }
+                signal_map[signal.name] = signal_info
+    return signal_map
+
+# 用法示例:
+# dynamic_map = load_signal_dynamic_map('config/adas_bus.dbc.txt')
+# print(dynamic_map)
+"""

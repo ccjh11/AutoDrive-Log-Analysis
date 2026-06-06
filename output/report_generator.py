@@ -1,7 +1,6 @@
 import os
 import numpy as np
 import matplotlib.pyplot as plt
-from core.data_processor import load_and_clean_log
 from core.rule_engine import RuleEngine, generate_report
 
 from datetime import datetime
@@ -10,7 +9,7 @@ from docx.shared import Inches
 from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
 from io import BytesIO
 
-def plot_signals_and_save(frames, output_dir="output_figures"):
+def plot_signals_and_save(cleaned_df, output_dir="output_figures"):
     """
     生成曲线: 车速(Speed)、目标距离(Target_Distance)、AEB触发(AEB_Trigger)、制动压力(Brake_Pressure)、DTC码(DTC_Code)
     返回每个曲线的图片路径dict
@@ -19,58 +18,37 @@ def plot_signals_and_save(frames, output_dir="output_figures"):
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
-    # 支持frame是dict或对象
-    def extract_value(f, key):
-        # 优先用key，不区分大小写
-        if isinstance(f, dict):
-            # 支持不区分大小写字段
-            for k in f:
-                if k.lower() == key.lower():
-                    return f[k]
-            return None
-        else:
-            # 尝试直接getattr，或小写
-            if hasattr(f, key):
-                return getattr(f, key)
-            elif hasattr(f, key.lower()):
-                return getattr(f, key.lower())
-            else:
-                # 还可以尝试属性名全小写
-                for attr in dir(f):
-                    if attr.lower() == key.lower():
-                        return getattr(f, attr)
-                return None
+    # 字段不区分大小写匹配DataFrame的列名
+    def extract_col(col_key):
+        for c in cleaned_df.columns:
+            if c.lower() == col_key.lower():
+                return cleaned_df[c]
+        return [None] * len(cleaned_df)
+    
+    # 时间字段支持不同大小写
+    times = extract_col('time')
+    speeds = extract_col('Speed')
+    distances = extract_col('Target_Distance')
+    aeb_triggers = extract_col('AEB_Trigger')
+    brake_pressures = extract_col('Brake_Pressure')
+    dtc_codes = extract_col('DTC_Code')
 
-    # 采用以上extract_value，确保字段妥善读取
-    times = []
-    speeds = []
-    distances = []
-    aeb_triggers = []
-    brake_pressures = []
-    dtc_codes = []
+    # aeb, brake欠缺值填充
+    aeb_triggers = np.array([0 if (v is None or (isinstance(v, float) and np.isnan(v))) else v for v in aeb_triggers])
+    brake_pressures = np.array([0 if (v is None or (isinstance(v, float) and np.isnan(v))) else v for v in brake_pressures])
 
-    for f in frames:
-        times.append(extract_value(f, 'time'))
-        speeds.append(extract_value(f, 'Speed'))
-        distances.append(extract_value(f, 'Target_Distance'))
-        aeb = extract_value(f, 'AEB_Trigger')
-        # 如果AEB_Trigger为None自动转为0
-        aeb_triggers.append(0 if aeb is None else aeb)
-        bp = extract_value(f, 'Brake_Pressure')
-        brake_pressures.append(0 if bp is None else bp)
-        dtc_codes.append(extract_value(f, 'DTC_Code'))
+    # 转np.array，其他字段nan填充
+    times_array = np.array([x for x in times])
+    speeds_array = np.array([np.nan if (x is None) else x for x in speeds])
+    distances_array = np.array([np.nan if (x is None) else x for x in distances])
+    aeb_triggers_array = aeb_triggers
+    brake_pressures_array = np.array([np.nan if (x is None) else x for x in brake_pressures])
+    # dtc_codes原样用
 
-    # 转np.array，过滤掉None（只对坐标轴进行简单处理）
-    times_array = np.array([x for x in times if x is not None])
-    speeds_array = np.array([x if x is not None else np.nan for x in speeds])
-    distances_array = np.array([x if x is not None else np.nan for x in distances])
-    aeb_triggers_array = np.array([x if x is not None else 0 for x in aeb_triggers])
-    brake_pressures_array = np.array([x if x is not None else np.nan for x in brake_pressures])
-    # dtc_codes 保持原始顺序
+    # 若时间轴全空则构造序号
+    if np.all([x is None or (isinstance(x, float) and np.isnan(x)) for x in times]):
+        times_array = np.arange(len(cleaned_df))
 
-    # 如果所有数据都为空，给一个空数组，避免报错
-    if len(times_array) == 0:
-        times_array = np.arange(len(frames))
     paths = {}
 
     # ====== 加采样：只取每10个数据 ======
@@ -80,7 +58,7 @@ def plot_signals_and_save(frames, output_dir="output_figures"):
     distances_sample = distances_array[::step]
     aeb_triggers_sample = aeb_triggers_array[::step]
     brake_pressures_sample = brake_pressures_array[::step]
-    # 注：DTC码文本原样导出，不采样
+    # DTC码原样导出
 
     # 车速曲线
     plt.figure(figsize=(10, 4))
@@ -135,7 +113,7 @@ def plot_signals_and_save(frames, output_dir="output_figures"):
     plt.close()
     paths['Brake_Pressure'] = brake_pressure_path
 
-    # DTC Code 序列文本输出, 用表格而不是曲线呈现
+    # DTC Code list
     dtc_code_txt_path = os.path.join(output_dir, "dtc_code_list.txt")
     with open(dtc_code_txt_path, "w", encoding="utf-8") as f:
         for t, dtc in zip(times, dtc_codes):
@@ -216,21 +194,19 @@ def generate_html_report(
     return '\n'.join(html_lines)
 
 def main(
-    log_path,
+    cleaned_df,
     report_title="台架自动化日志分析报告",
     output_dir="output_result"
 ):
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
-    print(f"[系统] 正在加载日志：{log_path}")
-    frames = load_and_clean_log(log_path)
-    print(f"[系统] 日志帧加载完成，共 {len(frames)} 条")
+    print(f"[系统] 已获得清洗后的DataFrame，行数：{len(cleaned_df)}")
     # 1. 画图 & 保存
-    figs = plot_signals_and_save(frames, output_dir=os.path.join(output_dir, "figures"))
+    figs = plot_signals_and_save(cleaned_df, output_dir=os.path.join(output_dir, "figures"))
 
     # 2. 执行规则检测
-    engine = RuleEngine(frames)
+    engine = RuleEngine(cleaned_df)
     rules_report = engine.analyze()
     print(f"[系统] 自动检测完成，异常数量: {len(rules_report)}")
 
@@ -300,8 +276,8 @@ def main(
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(description="自动日志分析系统")
-    parser.add_argument("--log", help="日志csv文件路径", required=True)
     parser.add_argument("--name", help="测试名称", default="台架自动化日志分析报告")
     parser.add_argument("--out", help="结果输出目录", default="output_result")
+    # 注意：现在不再在此接收 --log 参数
     args = parser.parse_args()
-    main(log_path=args.log, report_title=args.name, output_dir=args.out)
+    print("错误：此脚本现在要求由主调度用 cleaned_df 直接调用 main()，不应直接命令行运行。")

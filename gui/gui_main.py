@@ -5,32 +5,14 @@ import os
 
 def start_gui(pipeline_func):
     import sys
-    import time
     # 如果是在打包的exe中，修正工作路径
     if getattr(sys, 'frozen', False):
         os.chdir(sys._MEIPASS if hasattr(sys, '_MEIPASS') else os.getcwd())
-
-    # 动态import防止循环依赖
-    import_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'output', 'report_generator.py'))
-    if os.path.exists(import_path):
-        import importlib.util
-        spec = importlib.util.spec_from_file_location('report_generator', import_path)
-        report_generator = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(report_generator)
-    else:
-        messagebox.showerror("错误", "未找到 report_generator.py！")
-        return
 
     root = tk.Tk()
     root.title("自动日志分析系统 - GUI")
     root.geometry('520x270')
     root.resizable(False, False)
-    
-    # 用一个对象window来存储一些全局状态，如选定的文件
-    class WindowState:
-        def __init__(self):
-            self.selected_file = ""
-    window = WindowState()
 
     log_path_var = tk.StringVar()
     report_name_var = tk.StringVar(value="台架自动化日志分析报告")
@@ -44,7 +26,6 @@ def start_gui(pipeline_func):
         if path:
             log_path_var.set(path)
             log_file_label.config(text=os.path.basename(path))
-            window.selected_file = path  # 保存选中的文件路径
 
     def select_output_dir():
         path = filedialog.askdirectory(title='选择报告输出目录')
@@ -66,30 +47,42 @@ def start_gui(pipeline_func):
             messagebox.showerror("错误", "请先选择日志文件！")
             return
 
+        log_csv_path = log_path_var.get()
+        report_title = report_name_var.get()
+        output_dir = output_dir_var.get()
+
+        # 修改：on_analysis_done 支持 **kwargs，且确保进度条完整走到100%（彻底完善）
+        def on_analysis_done(success, msg, **kwargs):
+            def update_ui():
+                if success:
+                    # 不论是否主流程传了progress，都手动拉满进度条
+                    progress_var.set(100)
+                    progress_bar['value'] = 100
+                    progress_label.config(text="进度: 100%")
+                    root.update_idletasks()
+                    messagebox.showinfo(
+                        "完成",
+                        f"报告生成成功！\nHTML: {os.path.join(output_dir, 'report.html')}\n"
+                        f"Word: {os.path.join(output_dir, 'report.docx')}"
+                    )
+                else:
+                    # 失败则归零
+                    progress_var.set(0)
+                    progress_bar['value'] = 0
+                    progress_label.config(text="进度: 0%")
+                    root.update_idletasks()
+                    messagebox.showerror("分析失败", f"发生异常：{msg}")
+            root.after(0, update_ui)
+
         def analysis_task():
-            try:
-                show_progress(0)
-                # 0-20%: 加载
-                time.sleep(0.2)
-                show_progress(10)
-                log_path = log_path_var.get()
-                report_title = report_name_var.get()
-                output_dir = output_dir_var.get()
-                # 20-30%: 加载日志（粗略估算）
-                show_progress(20)
-                # 把界面选好的文件路径传给流水线去跑
-                pipeline_func(window.selected_file)
-                # 30-85%: 报告生成
-                report_generator.main(
-                    log_path=log_path,
-                    report_title=report_title,
-                    output_dir=output_dir
-                )
-                show_progress(100)
-                messagebox.showinfo("完成", f"报告生成成功！\nHTML: {os.path.join(output_dir, 'report.html')}\nWord: {os.path.join(output_dir, 'report.docx')}")
-            except Exception as e:
-                show_progress(0)
-                messagebox.showerror("分析失败", f"发生异常：{str(e)}")
+            show_progress(10)
+            pipeline_func(
+                log_csv_path=log_csv_path,
+                output_dir=output_dir,
+                report_title=report_title,
+                callback=on_analysis_done,
+            )
+            show_progress(100)
 
         threading.Thread(target=analysis_task, daemon=True).start()
 
@@ -125,7 +118,8 @@ def start_gui(pipeline_func):
     root.mainloop()
 
 if __name__ == "__main__":
-    def dummy_pipeline(path):
-        # 可替换为真实流水线逻辑
-        print(f"Pipeline received: {path}")
+    def dummy_pipeline(log_csv_path, output_dir, report_title, callback, signal_dynamic_map=None):
+        print(f"Pipeline received: {log_csv_path}")
+        if callback:
+            callback(success=True, msg="dummy done")
     start_gui(dummy_pipeline)
